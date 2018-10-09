@@ -1,8 +1,10 @@
 #include <iostream>
 
-#include "board.h"
+#include "bitboard.h"
 #include "intro.h"
+#include "game.h"
 #include "test.h"
+#include "board.h"
 #include "move.h"
 
 // Strategies available: random, minimax
@@ -26,11 +28,14 @@ int main() {
 }
 
 void gameMain() {
+    initPieceLookupTable();
+    initKnightLookupTable();
+    initRayLookupTable();
+
     showIntroText();
 
-    PieceRange currentPlayer = getStartingParticipant();
-
     Board board;
+    PieceRange currentPlayer = getStartingParticipant();
 
     cout << endl << "Welcome! Here's a new board:" << endl;
     while (true) {
@@ -39,36 +44,40 @@ void gameMain() {
 
         GameState gameState = board.getGameState();
         if (gameState != GameState::IsPlaying) {
-            std::string winner = gameState == GameState::HumanWins? "player" : "computer";
+            std::string winner = gameState == GameState::WhiteWins? "player" : "computer";
             cout << "Game over! The " << winner << " won." << endl;
             return;
         }
 
-        Move move{};
-        if (currentPlayer == PieceRange::CpuAi) {
+        Move move{PieceType::EmptyPiece, 0, 0};
+        if (currentPlayer == PieceRange::Black) {
             move = getComputerMove(board, moves);
-            currentPlayer = PieceRange::Human;
+            board.performBlackMove(move);
+            currentPlayer = PieceRange::White;
         } else {
             move = getPlayerMove(moves);
-            currentPlayer = PieceRange::CpuAi;
+            board.performWhiteMove(move);
+            currentPlayer = PieceRange::Black;
         }
 
         cout << "Move: " << move << '(' << move.inverse() << ')' << endl;
-        board.performMove(move);
     }
 }
 
 Move getPlayerMove(const std::vector<Move> &moves) {
     while (true) {
-        Move playerMove{};
+        Move playerMove{PieceType::EmptyPiece, 0, 0};
 
         cout << endl << "Valid moves: ";
         for (auto move : moves) {
             cout << move << ' ';
         }
-        cout << endl;
-        cout << "What's your move? " << flush;
-        cin >> playerMove;
+        cout << endl << "What's your move? " << flush;
+
+        char inputBuffer[5] = {0};
+        cin >> inputBuffer;
+        inputBuffer[4] = '\0';
+        inputBuffer >> playerMove;
 
         for (auto possibleMove : moves) {
             if (playerMove == possibleMove) return possibleMove;

@@ -1,271 +1,444 @@
 #pragma once
 
-#include <iostream>
+#include <ostream>
+#include <vector>
 
 #include "types.h"
+#include "bitboard.h"
 #include "color.h"
 #include "move.h"
-#include "game.h"
 
 using std::endl;
 
-enum PieceType {
-    EmptyPiece  = 00,
-
-    CpuAiPawn   = 11,
-    CpuAiBishop = 13,
-    CpuAiRook   = 15,
-    CpuAiKnight = 17,
-    CpuAiCar    = 19,
-
-    HumanPawn   = 21,
-    HumanBishop = 23,
-    HumanRook   = 25,
-    HumanKnight = 27,
-    HumanCar    = 29,
-};
-
-static const u8 STARTING_BOARD[8][7] = {
-        {19, 00, 00, 00, 00, 00, 00},
-        {00, 11, 00, 00, 00, 00, 00},
-        {15, 15, 11, 13, 13, 00, 00},
-        {17, 17, 00, 11, 11, 11, 11},
-        {27, 27, 00, 21, 21, 21, 21},
-        {25, 25, 21, 23, 23, 00, 00},
-        {00, 21, 00, 00, 00, 00, 00},
-        {29, 00, 00, 00, 00, 00, 00},
-};
-
-static const bool LANE_SQUARES[8][7] = {
-        {true , false, false, false, false, false, false},
-        {false, true , false, false, false, false, false},
-        {false, false, true , false, false, false, false},
-        {false, false, false, true , true , true , true },
-        {false, false, false, true , true , true , true },
-        {false, false, true , false, false, false, false},
-        {false, true , false, false, false, false, false},
-        {true , false, false, false, false, false, false},
-};
-
 class Board {
-    u8 *memory;
-
-    inline bool inBounds(u8 x, u8 y) const {
-        return x < 7 && y < 8;
-    }
-
-    inline bool inRange(int piece, PieceRange range) const {
-        return range == PieceRange::Human? piece > PieceRange::Human : piece < PieceRange::Human;
-    }
-
-    inline bool rayCast(std::vector<Move> &moves, PieceRange range, u8 x, u8 y,
-                        int forwardY, int forwardX, bool canGoEmpty) const {
-        u8 testX = x;
-        u8 testY = y;
-
-        do {
-            // Forward left
-            testX += forwardX;
-            testY += forwardY;
-
-            if(inBounds(testX, testY) && isEmpty(testX, testY)) {
-                if (canGoEmpty) moves.push_back(Move {x, y, testX, testY});
-            } else break;
-        } while (true);
-
-        if (inBounds(testX, testY)) {
-            int piece = getPiece(testX, testY);
-            if (!inRange(piece, range) && piece != CpuAiCar && piece != HumanCar) {
-                moves.push_back(Move {x, y, testX, testY});
-            }
-        }
-    }
-
-    inline void testAndAdd(std::vector<Move> &moves, PieceRange range,
-            u8 x, u8 y, int relX, int relY, bool canGoEmpty) const {
-        auto testX = static_cast<u8>(x + relX);
-        auto testY = static_cast<u8>(y + relY);
-
-        if (inBounds(testX, testY)) {
-            u8 targetPiece = getPiece(testX, testY);
-            if ((targetPiece == EmptyPiece && canGoEmpty)
-             || (targetPiece != EmptyPiece && targetPiece != HumanCar
-                && targetPiece != CpuAiCar && !inRange(targetPiece, range))) {
-                moves.push_back(Move {x, y, testX, testY});
-            }
-        }
-    }
-
-    inline void addCarMove(std::vector<Move> &moves, PieceRange range, bool necessary) const {
-        Move carMove = getCarMove(range);
-        if (necessary || isEmpty(carMove.x2, carMove.y2)) {
-            moves.push_back(carMove);
-        }
-    }
-
-    void addValidMoves(std::vector<Move> &moves, PieceRange range, u8 x, u8 y, int forwardY) const {
-        switch(getPiece(x, y) % 10) {
-            case 1: // Pawn
-                if (inBounds(x, static_cast<u8>(y + forwardY)) && isEmpty(x, static_cast<u8>(y + forwardY))) {
-                    moves.push_back(Move {x, y, x, static_cast<u8>(y + forwardY)});
-                }
-
-                testAndAdd(moves, range, x, y, +1, forwardY, false);
-                testAndAdd(moves, range, x, y, -1, forwardY, false);
-                break;
-
-            case 3: // Bishop
-                rayCast(moves, range, x, y, +forwardY, -1, true); // Forward left
-                rayCast(moves, range, x, y, +forwardY, +1, true); // Forward right
-                rayCast(moves, range, x, y, -forwardY, -1, false); // Backwards left
-                rayCast(moves, range, x, y, -forwardY, +1, false); // Backwards right
-                break;
-
-            case 5: // Rook
-                rayCast(moves, range, x, y, +forwardY, 0, true); // Forward
-                rayCast(moves, range, x, y, -forwardY, 0, false); // Backward
-                rayCast(moves, range, x, y, 0, -1, false); // Left
-                rayCast(moves, range, x, y, 0, +1, false); // Right
-                break;
-
-            case 7: // Knight
-                // Forward
-                testAndAdd(moves, range, x, y, 2, forwardY, true);
-                testAndAdd(moves, range, x, y, -2, forwardY, true);
-                testAndAdd(moves, range, x, y, 1, forwardY*2, true);
-                testAndAdd(moves, range, x, y, -1, forwardY*2, true);
-
-                // Backward
-                testAndAdd(moves, range, x, y, 2, -forwardY, false);
-                testAndAdd(moves, range, x, y, -2, -forwardY, false);
-                testAndAdd(moves, range, x, y, 1, (-forwardY)*2, false);
-                testAndAdd(moves, range, x, y, -1, (-forwardY)*2, false);
-
-                break;
-
-            case 9: // The Car
-                addCarMove(moves, range, false);
-                break;
-
-            default:
-                std::cout << "unknown piece (x: " << x << ", y: " << y <<
-                            ") (piece type: " << getPiece(x,y) << ")" << std::endl;
-                break;
-        }
-    }
-
 public:
+    BitBoard whitePawns     = 0b0000000000000000000000000000000001111000000001000000001000000000;
+    BitBoard whiteKnights   = 0b0000000000000000000000000000000000000011000000000000000000000000;
+    BitBoard whiteRooks     = 0b0000000000000000000000000000000000000000000000110000000000000000;
+    BitBoard whiteBishops   = 0b0000000000000000000000000000000000000000000110000000000000000000;
+    BitBoard whiteCar       = 0b0000000000000000000000000000000000000000000000000000000000000001;
+
+    BitBoard blackPawns     = 0b0000000000000010000001000111100000000000000000000000000000000000;
+    BitBoard blackKnights   = 0b0000000000000000000000000000001100000000000000000000000000000000;
+    BitBoard blackRooks     = 0b0000000000000000000000110000000000000000000000000000000000000000;
+    BitBoard blackBishops   = 0b0000000000000000000110000000000000000000000000000000000000000000;
+    BitBoard blackCar       = 0b0000000100000000000000000000000000000000000000000000000000000000;
+
+    BitBoard allWhitePieces;
+    BitBoard allBlackPieces;
+    BitBoard allPieces;
+
     Board() {
-        memory = new u8[8 * 7];
-
-        for (int y = 0; y < 8; y++) {
-            for (int x = 0; x < 7; x++) {
-                setPiece(x, y, STARTING_BOARD[y][x]);
-            }
-        }
+        updatePieceAggregates();
     }
 
-    Board(const Board& from) {
-        memory = new u8[8 * 7];
+    Board(const Board &oldBoard) {
+        whitePawns = oldBoard.whitePawns;
+        whiteRooks = oldBoard.whiteRooks;
+        whiteKnights = oldBoard.whiteKnights;
+        whiteBishops = oldBoard.whiteBishops;
+        whiteCar = oldBoard.whiteCar;
 
-        for (int i = 0; i < 8 * 7; i++) {
-            memory[i] = from.memory[i];
-        }
+        blackPawns = oldBoard.blackPawns;
+        blackRooks = oldBoard.blackRooks;
+        blackKnights = oldBoard.blackKnights;
+        blackBishops = oldBoard.blackBishops;
+        blackCar = oldBoard.blackCar;
+
+        // don't update the aggregates, since there will be changes right after init.
     }
 
-    ~Board() {
-        delete[](memory);
+    inline void updatePieceAggregates() {
+        allWhitePieces = whitePawns.bits | whiteRooks.bits | whiteKnights.bits | whiteBishops.bits | whiteCar.bits;
+        allBlackPieces = blackPawns.bits | blackRooks.bits | blackKnights.bits | blackBishops.bits | blackCar.bits;
+        allPieces = allWhitePieces.bits | allBlackPieces.bits;
     }
 
-    void performMove(const Move &move) {
-        u8 oldPiece = getPiece(move.x1, move.y1);
-        setPiece(move.x1, move.y1, 00);
-        setPiece(move.x2, move.y2, oldPiece);
-    }
+    inline std::vector<Move> getValidMoves(PieceRange range, bool includeCar = true) const {
+        std::vector<Move> moves;
+        moves.reserve(32);
 
-    inline Move getCarMove(PieceRange range) const {
-        if (range == PieceRange::CpuAi) {
-            if (getPiece(0, 0) == CpuAiCar) return Move {0, 0, 1, 1};
-            if (getPiece(1, 1) == CpuAiCar) return Move {1, 1, 2, 2};
-            if (getPiece(2, 2) == CpuAiCar) return Move {2, 2, 3, 3};
-            if (getPiece(3, 3) == CpuAiCar) return Move {3, 3, 4, 3};
-            if (getPiece(4, 3) == CpuAiCar) return Move {4, 3, 5, 3};
-            if (getPiece(5, 3) == CpuAiCar) return Move {5, 3, 6, 3};
+        if (range == PieceRange::White) {
+            addWhitePawnMoves(moves);
+            addWhiteKnightMoves(moves);
+            addWhiteRookMoves(moves);
+            addWhiteBishopMoves(moves);
+            if (includeCar) addWhiteCarMove(moves);
         } else {
-            if (getPiece(0, 7) == HumanCar) return Move {0, 7, 1, 6};
-            if (getPiece(1, 6) == HumanCar) return Move {1, 6, 2, 5};
-            if (getPiece(2, 5) == HumanCar) return Move {2, 5, 3, 4};
-            if (getPiece(3, 4) == HumanCar) return Move {3, 4, 4, 4};
-            if (getPiece(4, 4) == HumanCar) return Move {4, 4, 5, 4};
-            if (getPiece(5, 4) == HumanCar) return Move {5, 4, 6, 4};
-        }
-        std::cout << "??? Dude, where's my car ???" << std::endl;
-    }
-
-    std::vector<Move> getValidMoves(PieceRange range) const {
-        // TODO: Zobrist hashing
-
-        auto moves = std::vector<Move>();
-        int forwardY = range == PieceRange::CpuAi ? 1 : -1; // The computer considers down (+y) as "forward"
-
-        for (u8 y = 0; y < 8; y++) {
-            for (u8 x = 0; x < 7; x++) {
-                int pieceType = getPiece(x, y) - range;
-                if (pieceType >= 0 && pieceType <= 9) {
-                    addValidMoves(moves, range, x, y, forwardY);
-                }
-            }
-        }
-
-        if (moves.empty()) {
-            addCarMove(moves, range, true);
+            addBlackPawnMoves(moves);
+            addBlackKnightMoves(moves);
+            addBlackRookMoves(moves);
+            addBlackBishopMoves(moves);
+            if (includeCar) addBlackCarMove(moves);
         }
 
         return moves;
     }
 
     GameState getGameState() const {
-        if (getPiece(6, 3) == CpuAiCar) return GameState::CpuAiWins;
-        if (getPiece(6, 4) == HumanCar) return GameState::HumanWins;
-        return GameState::IsPlaying;
+        if (unlikely(whiteCar.bits == pieceLookupTable[30])) {
+            return GameState::WhiteWins;
+        } else if (unlikely(blackCar.bits == pieceLookupTable[38])) {
+            return GameState::BlackWins;
+        } else {
+            return GameState::IsPlaying;
+        }
     }
 
-    inline bool isEmpty(int x, int y) const {
-        return getPiece(x, y) == 00;
+    void performWhiteMove(Move move) {
+        u64 fromMask = maskPieceLookupTable[move.fromCell];
+        u64 toMask = maskPieceLookupTable[move.toCell];
+
+        switch (move.movingPiece) {
+            case WhitePawn:
+                whitePawns.bits &= fromMask;
+                whitePawns.bits |= pieceLookupTable[move.toCell];
+                break;
+            case WhiteKnight:
+                whiteKnights.bits &= fromMask;
+                whiteKnights.bits |= pieceLookupTable[move.toCell];
+                break;
+            case WhiteRook:
+                whiteRooks.bits &= fromMask;
+                whiteRooks.bits |= pieceLookupTable[move.toCell];
+                break;
+            case WhiteBishop:
+                whiteBishops.bits &= fromMask;
+                whiteBishops.bits |= pieceLookupTable[move.toCell];
+                break;
+            case WhiteCar:
+                whitePawns.bits &= toMask;
+                whiteKnights.bits &= toMask;
+                whiteRooks.bits &= toMask;
+                whiteBishops.bits &= toMask;
+                whiteCar.bits = pieceLookupTable[move.toCell];
+                break;
+            default:
+                cout << "Invalid piece type for white move" << endl;
+        }
+
+        blackPawns.bits &= toMask;
+        blackKnights.bits &= toMask;
+        blackRooks.bits &= toMask;
+        blackBishops.bits &= toMask;
+
+        updatePieceAggregates();
     }
 
-    inline u8 getPiece(int x, int y) const {
-        return memory[x + y * 7];
+    void performBlackMove(Move move) {
+        u64 fromMask = maskPieceLookupTable[move.fromCell];
+        u64 toMask = maskPieceLookupTable[move.toCell];
+
+        switch (move.movingPiece) {
+            case BlackPawn:
+                blackPawns.bits &= fromMask;
+                blackPawns.bits |= pieceLookupTable[move.toCell];
+                break;
+            case BlackKnight:
+                blackKnights.bits &= fromMask;
+                blackKnights.bits |= pieceLookupTable[move.toCell];
+                break;
+            case BlackRook:
+                blackRooks.bits &= fromMask;
+                blackRooks.bits |= pieceLookupTable[move.toCell];
+                break;
+            case BlackBishop:
+                blackBishops.bits &= fromMask;
+                blackBishops.bits |= pieceLookupTable[move.toCell];
+                break;
+            case BlackCar:
+                blackPawns.bits &= toMask;
+                blackKnights.bits &= toMask;
+                blackRooks.bits &= toMask;
+                blackBishops.bits &= toMask;
+                blackCar.bits = pieceLookupTable[move.toCell];
+                break;
+            default:
+                cout << "Invalid piece type for black move" << endl;
+        }
+
+        whitePawns.bits &= toMask;
+        whiteKnights.bits &= toMask;
+        whiteRooks.bits &= toMask;
+        whiteBishops.bits &= toMask;
+
+        updatePieceAggregates();
     }
 
-    inline void setPiece(int x, int y, u8 piece) {
-        memory[x + y * 7] = piece;
+private:
+    void addWhitePawnMoves(std::vector<Move> &moves) const {
+        BitBoard pawnBoard;
+
+        pawnBoard.bits = whitePawns.bits << 9u & leftColMask & allBlackPieces.bits & ~blackCar.bits;
+        while (pawnBoard.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
+            moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 9), firstBit});
+            pawnBoard.bits &= pawnBoard.bits - 1;
+        }
+
+        pawnBoard.bits = whitePawns.bits << 7u & rightColMask & allBlackPieces.bits & ~blackCar.bits;
+        while (pawnBoard.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
+            moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 7), firstBit});
+            pawnBoard.bits &= pawnBoard.bits - 1;
+        }
+
+        pawnBoard.bits = whitePawns.bits << 8u & ~allPieces.bits;
+        while (pawnBoard.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
+            moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 8), firstBit});
+            pawnBoard.bits &= pawnBoard.bits - 1;
+        }
+    }
+
+    void addBlackPawnMoves(std::vector<Move> &moves) const {
+        BitBoard pawnBoard;
+
+        pawnBoard.bits = blackPawns.bits >> 9u & rightColMask & allWhitePieces.bits & ~whiteCar.bits;
+        while (pawnBoard.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
+            moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 9), firstBit});
+            pawnBoard.bits &= pawnBoard.bits - 1;
+        }
+
+        pawnBoard.bits = blackPawns.bits >> 7u & leftColMask & allWhitePieces.bits & ~whiteCar.bits;
+        while (pawnBoard.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
+            moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 7), firstBit});
+            pawnBoard.bits &= pawnBoard.bits - 1;
+        }
+
+        pawnBoard.bits = blackPawns.bits >> 8u & ~allPieces.bits;
+        while (pawnBoard.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
+            moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 8), firstBit});
+            pawnBoard.bits &= pawnBoard.bits - 1;
+        }
+    }
+
+    void addWhiteKnightMoves(std::vector<Move> &moves) const {
+        BitBoard knights(whiteKnights);
+        while (knights.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(knights.bits));
+            knights.bits &= knights.bits - 1;
+
+            BitBoard attack = knightLookupTable[firstBit] & ~(allWhitePieces.bits | blackCar.bits);
+
+            while (attack.bits) {
+                auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
+                if (secondBit > firstBit) {
+                    moves.push_back(Move{WhiteKnight, firstBit, secondBit});
+                } else {
+                    u64 testBit = C64(1) << secondBit;
+                    if ((testBit & allBlackPieces.bits) && (testBit ^ blackCar.bits)) {
+                        moves.push_back(Move{WhiteKnight, firstBit, secondBit});
+                    }
+                }
+                attack.bits &= attack.bits - 1;
+            }
+        }
+    }
+
+    void addBlackKnightMoves(std::vector<Move> &moves) const {
+        BitBoard knights(blackKnights);
+        while (knights.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(knights.bits));
+            knights.bits &= knights.bits - 1;
+
+            BitBoard attack = knightLookupTable[firstBit] & ~(allBlackPieces.bits | whiteCar.bits);
+
+            while (attack.bits) {
+                auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
+                if (secondBit < firstBit) {
+                    moves.push_back(Move{BlackKnight, firstBit, secondBit});
+                } else {
+                    u64 testBit = C64(1) << secondBit;
+                    if ((testBit & allWhitePieces.bits) && (testBit ^ whiteCar.bits)) {
+                        moves.push_back(Move{BlackKnight, firstBit, secondBit});
+                    }
+                }
+                attack.bits &= attack.bits - 1;
+            }
+        }
+    }
+
+    void addWhiteRookMoves(std::vector<Move> &moves) const {
+        BitBoard rooks(whiteRooks);
+        while (rooks.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(rooks.bits));
+            rooks.bits &= rooks.bits - 1;
+
+            BitBoard attack = getPositiveRayAttacks(allWhitePieces, North, firstBit);
+            attack.bits |= (getPositiveRayAttacks(allWhitePieces, East, firstBit)
+                            | getNegativeRayAttacks(allWhitePieces, West, firstBit)
+                            | getNegativeRayAttacks(allWhitePieces, South, firstBit)) & allBlackPieces.bits;
+            attack.bits &= ~blackCar.bits;
+
+
+            while (attack.bits) {
+                auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
+                moves.push_back(Move{WhiteRook, firstBit, secondBit});
+                attack.bits &= attack.bits - 1;
+            }
+        }
+    }
+
+    void addBlackRookMoves(std::vector<Move> &moves) const {
+        BitBoard rooks(blackRooks);
+        while (rooks.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(rooks.bits));
+            rooks.bits &= rooks.bits - 1;
+
+            BitBoard attack = getNegativeRayAttacks(allBlackPieces, South, firstBit);
+            attack.bits |= (getPositiveRayAttacks(allBlackPieces, East, firstBit)
+                            | getNegativeRayAttacks(allBlackPieces, West, firstBit)
+                            | getPositiveRayAttacks(allBlackPieces, North, firstBit)) & allWhitePieces.bits;
+            attack.bits &= ~whiteCar.bits;
+
+            while (attack.bits) {
+                auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
+                moves.push_back(Move{BlackRook, firstBit, secondBit});
+                attack.bits &= attack.bits - 1;
+            }
+        }
+    }
+
+    void addWhiteBishopMoves(std::vector<Move> &moves) const {
+        BitBoard bishops(whiteBishops);
+        while (bishops.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(bishops.bits));
+            bishops.bits &= bishops.bits - 1;
+
+            BitBoard attack = getPositiveRayAttacks(allWhitePieces, NorthEast, firstBit)
+                            | getPositiveRayAttacks(allWhitePieces, NorthWest, firstBit);
+            attack.bits |=  ( getNegativeRayAttacks(allWhitePieces, SouthEast, firstBit)
+                            | getNegativeRayAttacks(allWhitePieces, SouthWest, firstBit)) & allBlackPieces.bits;
+            attack.bits &= ~blackCar.bits;
+
+
+            while (attack.bits) {
+                auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
+                moves.push_back(Move{WhiteBishop, firstBit, secondBit});
+                attack.bits &= attack.bits - 1;
+            }
+        }
+    }
+
+    void addBlackBishopMoves(std::vector<Move> &moves) const {
+        BitBoard bishops(blackBishops);
+        while (bishops.bits) {
+            auto firstBit = static_cast<u8>(__builtin_ctzll(bishops.bits));
+            bishops.bits &= bishops.bits - 1;
+
+            BitBoard attack = getNegativeRayAttacks(allBlackPieces, SouthEast, firstBit)
+                            | getNegativeRayAttacks(allBlackPieces, SouthWest, firstBit);
+            attack.bits |=  ( getPositiveRayAttacks(allBlackPieces, NorthEast, firstBit)
+                            | getPositiveRayAttacks(allBlackPieces, NorthWest, firstBit)) & allWhitePieces.bits;
+            attack.bits &= ~whiteCar.bits;
+
+
+            while (attack.bits) {
+                auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
+                moves.push_back(Move{BlackBishop, firstBit, secondBit});
+                attack.bits &= attack.bits - 1;
+            }
+        }
+    }
+
+    void addWhiteCarMove(std::vector<Move> &moves) const {
+        Move move{WhiteCar, 0, 0};
+        switch(whiteCar.bits) {
+            case C64(0b0000000000000000000000000000000000000000000000000000000000000001):
+                move = Move{WhiteCar, 0, 9};
+                break;
+            case C64(0b0000000000000000000000000000000000000000000000000000001000000000):
+                move = Move{WhiteCar, 9, 18};
+                break;
+            case C64(0b0000000000000000000000000000000000000000000001000000000000000000):
+                move = Move{WhiteCar, 18, 27};
+                break;
+            case C64(0b0000000000000000000000000000000000001000000000000000000000000000):
+                move = Move{WhiteCar, 27, 28};
+                break;
+            case C64(0b0000000000000000000000000000000000010000000000000000000000000000):
+                move = Move{WhiteCar, 28, 29};
+                break;
+            case C64(0b0000000000000000000000000000000000100000000000000000000000000000):
+                move = Move{WhiteCar, 29, 30};
+                break;
+            default:
+                cout << "?? Dude, where's my car ??" << endl;
+        }
+
+        if ((allPieces.bits & pieceLookupTable[move.toCell]) == 0 || moves.empty()) {
+            moves.push_back(move);
+        }
+    }
+
+    void addBlackCarMove(std::vector<Move> &moves) const {
+        // C++ doesn't support switch-case for values outside the range of an int, so we use if-else instead.
+        Move move{BlackCar, 0, 0};
+        if (blackCar.bits & pieceLookupTable[56]) {
+            move = Move{BlackCar, 56, 49};
+        } else if (blackCar.bits & pieceLookupTable[49]) {
+            move = Move{BlackCar, 49, 42};
+        } else if (blackCar.bits & pieceLookupTable[42]) {
+            move = Move{BlackCar, 42, 35};
+        } else if (blackCar.bits & pieceLookupTable[35]) {
+            move = Move{BlackCar, 35, 36};
+        } else if (blackCar.bits & pieceLookupTable[36]) {
+            move = Move{BlackCar, 36, 37};
+        } else if (blackCar.bits & pieceLookupTable[37]) {
+            move = Move{BlackCar, 37, 38};
+        } else {
+            cout << "?? Dude, where's my car ??" << endl;
+        }
+
+        if ((allPieces.bits & pieceLookupTable[move.toCell]) == 0 || moves.empty()) {
+            moves.push_back(move);
+        }
+    }
+
+    inline u64 getPositiveRayAttacks(BitBoard friendly, ScanDirection direction, u8 square) const {
+        u64 attacks = rayLookupTable[direction][square];
+        u64 blocker = attacks & allPieces.bits;
+        square = static_cast<u8>(__builtin_ctzll(blocker | C64(0x8000000000000000)));
+        u64 friendMask = friendly.bits & pieceLookupTable[square];
+        return attacks ^ rayLookupTable[direction][square] ^ friendMask;
+    }
+
+    inline u64 getNegativeRayAttacks(BitBoard friendly, ScanDirection direction, u8 square) const {
+        u64 attacks = rayLookupTable[direction][square];
+        u64 blocker = attacks & allPieces.bits;
+        square = static_cast<u8>(63 - __builtin_clzll(blocker | C64(1)));
+        u64 friendMask = friendly.bits & pieceLookupTable[square];
+        return attacks ^ rayLookupTable[direction][square] ^ friendMask;
     }
 };
 
-std::string pieceToString(u8 piece) {
-    const bool human = piece > PieceRange::Human;
-
-    switch (piece % 10) {
-        case 0:
-            return "   ";
-        case 1:
-            return human? " p " : " P ";
-        case 3:
-            return human? " b " : " B ";
-        case 5:
-            return human? " r " : " R ";
-        case 7:
-            return human? " n " : " N ";
-        case 9:
-            return human? " c " : " C ";
-        default:
-            return " ? ";
-    }
-}
+static const bool CAR_SQUARES[8][7] = {
+        {true , false, false, false, false, false, false},
+        {false, true , false, false, false, false, false},
+        {false, false, true , false, false, false, false},
+        {false, false, false, true , true , true , true },
+        {false, false, false, true , true , true , true },
+        {false, false, true , false, false, false, false},
+        {false, true , false, false, false, false, false},
+        {true , false, false, false, false, false, false},
+};
 
 std::ostream& operator<<(std::ostream &stream, const Board &board) {
     bool blueBG = true;
+
+    /*
+    using std::bitset;
+    //stream << "White" << endl;
+    stream << "Pawns: " << bitset<64>(board.whitePawns.bits) << endl;
+    stream << "Knights: " << bitset<64>(board.whiteKnights.bits) << endl;
+    stream << "Rooks: " << bitset<64>(board.whiteRooks.bits) << endl;
+    stream << "Bishops: " << bitset<64>(board.whiteBishops.bits) << endl;
+    stream << "Car: " << bitset<64>(board.whiteCar.bits) << endl << std::flush;
+    */
 
     stream << "   --------------------- COMPUTER" << endl;
 
@@ -273,12 +446,28 @@ std::ostream& operator<<(std::ostream &stream, const Board &board) {
         stream << ' ' << 8 - y << ' ';
 
         for (int x = 0; x < 7; x++) {
-            u8 piece = board.getPiece(x, y);
+            int bgColor = CAR_SQUARES[y][x]? RED : (blueBG? BLUE : BLACK);
 
-            int fgColor = piece > PieceRange::Human? WHITE : GREEN;
-            int bgColor = LANE_SQUARES[y][x]? RED : (blueBG? BLUE : BLACK);
-            setColor(stream, BRIGHT, fgColor, bgColor);
-            stream << pieceToString(piece);
+            if (board.allPieces.isBitSet(x, y)) {
+                if (board.allWhitePieces.isBitSet(x, y)) {
+                    setColor(stream, BRIGHT, WHITE, bgColor);
+                    if (board.whitePawns.isBitSet(x, y))    stream << " p ";
+                    if (board.whiteRooks.isBitSet(x, y))    stream << " r ";
+                    if (board.whiteKnights.isBitSet(x, y))  stream << " n ";
+                    if (board.whiteBishops.isBitSet(x, y))  stream << " b ";
+                    if (board.whiteCar.isBitSet(x, y))      stream << " c ";
+                } else {
+                    setColor(stream, BRIGHT, GREEN, bgColor);
+                    if (board.blackPawns.isBitSet(x, y))    stream << " P ";
+                    if (board.blackRooks.isBitSet(x, y))    stream << " R ";
+                    if (board.blackKnights.isBitSet(x, y))  stream << " N ";
+                    if (board.blackBishops.isBitSet(x, y))  stream << " B ";
+                    if (board.blackCar.isBitSet(x, y))      stream << " C ";
+                }
+            } else {
+                setColor(stream, BRIGHT, WHITE, bgColor);
+                stream << "   ";
+            }
 
             blueBG = !blueBG;
         }

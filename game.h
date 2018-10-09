@@ -2,11 +2,11 @@
 
 enum class GameState {
     IsPlaying,
-    CpuAiWins,
-    HumanWins,
+    BlackWins,
+    WhiteWins,
 };
 
 enum PieceRange {
-    CpuAi = 10,
-    Human = 20,
+    Black = 10,
+    White = 20,
 };

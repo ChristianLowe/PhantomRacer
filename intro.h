@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <iostream>
+#include <string>
 
-#include "board.h"
+#include "game.h"
 
 using std::cin;
 using std::cout;
@@ -19,16 +21,17 @@ PieceRange getStartingParticipant() {
     while (true) {
         cout << endl << "Who goes first? Type cpu or human: " << flush;
 
-        std::string first;
-        cin >> first;
+        char inputBuffer[1024] = {0};
+        cin >> inputBuffer;
+        std::string first(inputBuffer);
         std::transform(first.begin(), first.end(), first.begin(), ::tolower);
 
         if (first == "c" || first == "cpu" || first == "computer") {
             cout << "The computer goes first." << endl;
-            return PieceRange::CpuAi;
+            return PieceRange::Black;
         } else if (first == "h" || first == "human") {
             cout << "The player goes first." << endl;
-            return PieceRange::Human;
+            return PieceRange::White;
         }
     }
 }
