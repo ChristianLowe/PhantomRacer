@@ -7,7 +7,7 @@
 #include "board.h"
 #include "move.h"
 
-// Strategies available: random, minimax
+// Strategies available: random, minimax, mcts
 #include "strategy/minimax.h"
 
 using std::cin;
@@ -16,7 +16,7 @@ using std::endl;
 using std::flush;
 
 void gameMain();
-Move getPlayerMove(const std::vector<Move> &moves);
+Move getPlayerMove(const MoveList &moves);
 
 int main() {
 #if TESTING
@@ -28,9 +28,7 @@ int main() {
 }
 
 void gameMain() {
-    initPieceLookupTable();
-    initKnightLookupTable();
-    initRayLookupTable();
+    initAll();
 
     showIntroText();
 
@@ -64,12 +62,12 @@ void gameMain() {
     }
 }
 
-Move getPlayerMove(const std::vector<Move> &moves) {
+Move getPlayerMove(const MoveList &moves) {
     while (true) {
         Move playerMove{PieceType::EmptyPiece, 0, 0};
 
         cout << endl << "Valid moves: ";
-        for (auto move : moves) {
+        for (auto move : moves.moves) {
             cout << move << ' ';
         }
         cout << endl << "What's your move? " << flush;
@@ -79,7 +77,7 @@ Move getPlayerMove(const std::vector<Move> &moves) {
         inputBuffer[4] = '\0';
         inputBuffer >> playerMove;
 
-        for (auto possibleMove : moves) {
+        for (auto possibleMove : moves.moves) {
             if (playerMove == possibleMove) return possibleMove;
         }
 

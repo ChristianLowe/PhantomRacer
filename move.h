@@ -13,6 +13,34 @@ public:
         return Move{movingPiece, inverseShift(fromCell), inverseShift(toCell)};
     }
 
+    PieceRange moveRange() const {
+        switch (movingPiece) {
+            case PieceType::WhitePawn:
+            case PieceType::WhiteKnight:
+            case PieceType::WhiteRook:
+            case PieceType::WhiteBishop:
+            case PieceType::WhiteCar:
+                return PieceRange::White;
+
+            case PieceType::BlackPawn:
+            case PieceType::BlackKnight:
+            case PieceType::BlackRook:
+            case PieceType::BlackBishop:
+            case PieceType::BlackCar:
+                return PieceRange::Black;
+
+            default:
+                return PieceRange::NoRange;
+        }
+    }
+
+    bool operator<(const Move &other) const {
+        // Required to use Move as a map key
+        unsigned int left = fromCell + (toCell << 7u);
+        unsigned int right = other.fromCell + (other.toCell << 7u);
+        return left < right;
+    }
+
 private:
     u8 inverseShift(u8 cell) const {
         switch (cell / 8) {
@@ -29,6 +57,13 @@ private:
     }
 };
 
+class MoveList {
+public:
+    std::vector<Move> moves;
+    u64 carIdx = 0;
+
+    MoveList(std::vector<Move> moveList) : moves(moveList) {}
+};
 
 std::ostream& operator<<(std::ostream &stream, const Move &move) {
     return stream

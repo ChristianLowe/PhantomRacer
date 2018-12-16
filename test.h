@@ -168,9 +168,7 @@ void test(const std::string& name, bool (*f)()) {
 }
 
 void testingMain() {
-    initRayLookupTable();
-    initKnightLookupTable();
-    initPieceLookupTable();
+    initAll();
 
     test("pawn", testPawn);
     test("knight", testKnight);

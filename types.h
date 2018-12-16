@@ -15,17 +15,17 @@ typedef uint_fast64_t u64;
 const u64 U64_MAX = C64(0xFFFFFFFFFFFFFFFF);
 
 enum PieceType : u8 {
-    EmptyPiece  = 00,
+    EmptyPiece  = 0,
 
-    BlackPawn   = 11,
-    BlackBishop = 13,
-    BlackRook   = 15,
-    BlackKnight = 17,
-    BlackCar    = 19,
+    BlackPawn   = 1,
+    BlackKnight = 2,
+    BlackRook   = 3,
+    BlackBishop = 4,
+    BlackCar    = 5,
 
-    WhitePawn   = 21,
-    WhiteBishop = 23,
-    WhiteRook   = 25,
-    WhiteKnight = 27,
-    WhiteCar    = 29,
+    WhitePawn   = 6,
+    WhiteKnight = 7,
+    WhiteRook   = 8,
+    WhiteBishop = 9,
+    WhiteCar    = 10,
 };

@@ -2,6 +2,7 @@
 
 #include <ostream>
 #include <vector>
+#include <unordered_map>
 
 #include "types.h"
 #include "bitboard.h"
@@ -9,6 +10,9 @@
 #include "move.h"
 
 using std::endl;
+
+//static std::unordered_map<u64, std::vector<Move>> zobristWhiteMap;
+//static std::unordered_map<u64, std::vector<Move>> zobristBlackMap;
 
 class Board {
 public:
@@ -45,7 +49,7 @@ public:
         blackBishops = oldBoard.blackBishops;
         blackCar = oldBoard.blackCar;
 
-        // don't update the aggregates, since there will be changes right after init.
+        updatePieceAggregates();
     }
 
     inline void updatePieceAggregates() {
@@ -54,25 +58,32 @@ public:
         allPieces = allWhitePieces.bits | allBlackPieces.bits;
     }
 
-    inline std::vector<Move> getValidMoves(PieceRange range, bool includeCar = true) const {
-        std::vector<Move> moves;
-        moves.reserve(32);
-
+    inline MoveList getValidMoves(PieceRange range, bool includeCar = true) const {
         if (range == PieceRange::White) {
+            std::vector<Move> moveVector;
+            moveVector.reserve(32);
+
+            MoveList moves(moveVector);
             addWhitePawnMoves(moves);
             addWhiteKnightMoves(moves);
             addWhiteRookMoves(moves);
             addWhiteBishopMoves(moves);
             if (includeCar) addWhiteCarMove(moves);
+
+            return moves;
         } else {
+            std::vector<Move> moveVector;
+            moveVector.reserve(32);
+
+            MoveList moves(moveVector);
             addBlackPawnMoves(moves);
             addBlackKnightMoves(moves);
             addBlackRookMoves(moves);
             addBlackBishopMoves(moves);
             if (includeCar) addBlackCarMove(moves);
-        }
 
-        return moves;
+            return moves;
+        }
     }
 
     GameState getGameState() const {
@@ -165,58 +176,74 @@ public:
         updatePieceAggregates();
     }
 
+    u64 hash() const {
+        u64 result = 0;
+        u64 bits;
+
+        for (int i = 1; i <= 10; i++) {
+            bits = pieceTypeToBoard(static_cast<PieceType>(i)).bits;
+            while (bits) {
+                auto firstBit = static_cast<u8>(__builtin_ctzll(bits));
+                result ^= zobristTable[i][firstBit];
+                bits &= bits - 1;
+            }
+        }
+
+        return result;
+    }
+
 private:
-    void addWhitePawnMoves(std::vector<Move> &moves) const {
+    void addWhitePawnMoves(MoveList &moves) const {
         BitBoard pawnBoard;
 
         pawnBoard.bits = whitePawns.bits << 9u & leftColMask & allBlackPieces.bits & ~blackCar.bits;
         while (pawnBoard.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
-            moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 9), firstBit});
+            moves.moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 9), firstBit});
             pawnBoard.bits &= pawnBoard.bits - 1;
         }
 
         pawnBoard.bits = whitePawns.bits << 7u & rightColMask & allBlackPieces.bits & ~blackCar.bits;
         while (pawnBoard.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
-            moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 7), firstBit});
+            moves.moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 7), firstBit});
             pawnBoard.bits &= pawnBoard.bits - 1;
         }
 
         pawnBoard.bits = whitePawns.bits << 8u & ~allPieces.bits;
         while (pawnBoard.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
-            moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 8), firstBit});
+            moves.moves.push_back(Move{WhitePawn, static_cast<u8>(firstBit - 8), firstBit});
             pawnBoard.bits &= pawnBoard.bits - 1;
         }
     }
 
-    void addBlackPawnMoves(std::vector<Move> &moves) const {
+    void addBlackPawnMoves(MoveList &moves) const {
         BitBoard pawnBoard;
 
         pawnBoard.bits = blackPawns.bits >> 9u & rightColMask & allWhitePieces.bits & ~whiteCar.bits;
         while (pawnBoard.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
-            moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 9), firstBit});
+            moves.moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 9), firstBit});
             pawnBoard.bits &= pawnBoard.bits - 1;
         }
 
         pawnBoard.bits = blackPawns.bits >> 7u & leftColMask & allWhitePieces.bits & ~whiteCar.bits;
         while (pawnBoard.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
-            moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 7), firstBit});
+            moves.moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 7), firstBit});
             pawnBoard.bits &= pawnBoard.bits - 1;
         }
 
         pawnBoard.bits = blackPawns.bits >> 8u & ~allPieces.bits;
         while (pawnBoard.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(pawnBoard.bits));
-            moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 8), firstBit});
+            moves.moves.push_back(Move{BlackPawn, static_cast<u8>(firstBit + 8), firstBit});
             pawnBoard.bits &= pawnBoard.bits - 1;
         }
     }
 
-    void addWhiteKnightMoves(std::vector<Move> &moves) const {
+    void addWhiteKnightMoves(MoveList &moves) const {
         BitBoard knights(whiteKnights);
         while (knights.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(knights.bits));
@@ -227,11 +254,11 @@ private:
             while (attack.bits) {
                 auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
                 if (secondBit > firstBit) {
-                    moves.push_back(Move{WhiteKnight, firstBit, secondBit});
+                    moves.moves.push_back(Move{WhiteKnight, firstBit, secondBit});
                 } else {
                     u64 testBit = C64(1) << secondBit;
                     if ((testBit & allBlackPieces.bits) && (testBit ^ blackCar.bits)) {
-                        moves.push_back(Move{WhiteKnight, firstBit, secondBit});
+                        moves.moves.push_back(Move{WhiteKnight, firstBit, secondBit});
                     }
                 }
                 attack.bits &= attack.bits - 1;
@@ -239,7 +266,7 @@ private:
         }
     }
 
-    void addBlackKnightMoves(std::vector<Move> &moves) const {
+    void addBlackKnightMoves(MoveList &moves) const {
         BitBoard knights(blackKnights);
         while (knights.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(knights.bits));
@@ -250,11 +277,11 @@ private:
             while (attack.bits) {
                 auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
                 if (secondBit < firstBit) {
-                    moves.push_back(Move{BlackKnight, firstBit, secondBit});
+                    moves.moves.push_back(Move{BlackKnight, firstBit, secondBit});
                 } else {
                     u64 testBit = C64(1) << secondBit;
                     if ((testBit & allWhitePieces.bits) && (testBit ^ whiteCar.bits)) {
-                        moves.push_back(Move{BlackKnight, firstBit, secondBit});
+                        moves.moves.push_back(Move{BlackKnight, firstBit, secondBit});
                     }
                 }
                 attack.bits &= attack.bits - 1;
@@ -262,7 +289,7 @@ private:
         }
     }
 
-    void addWhiteRookMoves(std::vector<Move> &moves) const {
+    void addWhiteRookMoves(MoveList &moves) const {
         BitBoard rooks(whiteRooks);
         while (rooks.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(rooks.bits));
@@ -277,13 +304,13 @@ private:
 
             while (attack.bits) {
                 auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
-                moves.push_back(Move{WhiteRook, firstBit, secondBit});
+                moves.moves.push_back(Move{WhiteRook, firstBit, secondBit});
                 attack.bits &= attack.bits - 1;
             }
         }
     }
 
-    void addBlackRookMoves(std::vector<Move> &moves) const {
+    void addBlackRookMoves(MoveList &moves) const {
         BitBoard rooks(blackRooks);
         while (rooks.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(rooks.bits));
@@ -297,13 +324,13 @@ private:
 
             while (attack.bits) {
                 auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
-                moves.push_back(Move{BlackRook, firstBit, secondBit});
+                moves.moves.push_back(Move{BlackRook, firstBit, secondBit});
                 attack.bits &= attack.bits - 1;
             }
         }
     }
 
-    void addWhiteBishopMoves(std::vector<Move> &moves) const {
+    void addWhiteBishopMoves(MoveList &moves) const {
         BitBoard bishops(whiteBishops);
         while (bishops.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(bishops.bits));
@@ -318,13 +345,13 @@ private:
 
             while (attack.bits) {
                 auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
-                moves.push_back(Move{WhiteBishop, firstBit, secondBit});
+                moves.moves.push_back(Move{WhiteBishop, firstBit, secondBit});
                 attack.bits &= attack.bits - 1;
             }
         }
     }
 
-    void addBlackBishopMoves(std::vector<Move> &moves) const {
+    void addBlackBishopMoves(MoveList &moves) const {
         BitBoard bishops(blackBishops);
         while (bishops.bits) {
             auto firstBit = static_cast<u8>(__builtin_ctzll(bishops.bits));
@@ -339,13 +366,13 @@ private:
 
             while (attack.bits) {
                 auto secondBit = static_cast<u8>(__builtin_ctzll(attack.bits));
-                moves.push_back(Move{BlackBishop, firstBit, secondBit});
+                moves.moves.push_back(Move{BlackBishop, firstBit, secondBit});
                 attack.bits &= attack.bits - 1;
             }
         }
     }
 
-    void addWhiteCarMove(std::vector<Move> &moves) const {
+    void addWhiteCarMove(MoveList &moves) const {
         Move move{WhiteCar, 0, 0};
         switch(whiteCar.bits) {
             case C64(0b0000000000000000000000000000000000000000000000000000000000000001):
@@ -370,12 +397,13 @@ private:
                 cout << "?? Dude, where's my car ??" << endl;
         }
 
-        if ((allPieces.bits & pieceLookupTable[move.toCell]) == 0 || moves.empty()) {
-            moves.push_back(move);
+        if ((allPieces.bits & pieceLookupTable[move.toCell]) == 0 || moves.moves.empty()) {
+            moves.carIdx = moves.moves.size();
+            moves.moves.push_back(move);
         }
     }
 
-    void addBlackCarMove(std::vector<Move> &moves) const {
+    void addBlackCarMove(MoveList &moves) const {
         // C++ doesn't support switch-case for values outside the range of an int, so we use if-else instead.
         Move move{BlackCar, 0, 0};
         if (blackCar.bits & pieceLookupTable[56]) {
@@ -394,8 +422,9 @@ private:
             cout << "?? Dude, where's my car ??" << endl;
         }
 
-        if ((allPieces.bits & pieceLookupTable[move.toCell]) == 0 || moves.empty()) {
-            moves.push_back(move);
+        if ((allPieces.bits & pieceLookupTable[move.toCell]) == 0 || moves.moves.empty()) {
+            moves.carIdx = moves.moves.size();
+            moves.moves.push_back(move);
         }
     }
 
@@ -414,6 +443,26 @@ private:
         u64 friendMask = friendly.bits & pieceLookupTable[square];
         return attacks ^ rayLookupTable[direction][square] ^ friendMask;
     }
+
+    BitBoard pieceTypeToBoard(PieceType pieceType) const {
+        switch (pieceType) {
+            case BlackPawn:     return blackPawns;
+            case BlackKnight:   return blackKnights;
+            case BlackRook:     return blackRooks;
+            case BlackBishop:   return blackBishops;
+            case BlackCar:      return blackCar;
+
+            case WhitePawn:     return whitePawns;
+            case WhiteKnight:   return whiteKnights;
+            case WhiteRook:     return whiteRooks;
+            case WhiteBishop:   return whiteBishops;
+            case WhiteCar:      return whiteCar;
+
+            default:
+                cout << "Invalid board lookup from pieceType" << endl;
+                return {};
+        }
+    }
 };
 
 static const bool CAR_SQUARES[8][7] = {
@@ -429,16 +478,6 @@ static const bool CAR_SQUARES[8][7] = {
 
 std::ostream& operator<<(std::ostream &stream, const Board &board) {
     bool blueBG = true;
-
-    /*
-    using std::bitset;
-    //stream << "White" << endl;
-    stream << "Pawns: " << bitset<64>(board.whitePawns.bits) << endl;
-    stream << "Knights: " << bitset<64>(board.whiteKnights.bits) << endl;
-    stream << "Rooks: " << bitset<64>(board.whiteRooks.bits) << endl;
-    stream << "Bishops: " << bitset<64>(board.whiteBishops.bits) << endl;
-    stream << "Car: " << bitset<64>(board.whiteCar.bits) << endl << std::flush;
-    */
 
     stream << "   --------------------- COMPUTER" << endl;
 

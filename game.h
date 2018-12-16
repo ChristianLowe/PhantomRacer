@@ -6,7 +6,8 @@ enum class GameState {
     WhiteWins,
 };
 
-enum PieceRange {
+enum class PieceRange {
+    NoRange = 0,
     Black = 10,
     White = 20,
 };

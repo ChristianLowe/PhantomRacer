@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+
 #include "strategy.h"
 
 #define AB_PRUNING true
@@ -40,7 +41,7 @@ int heuristic(const Board &board) {
     return blackScore - whiteScore;
 }
 
-int minimax(const Board &board, const std::vector<Move> &moves, bool maximizingPlayer, int depth) {
+int minimax(const Board &board, const MoveList &moves, bool maximizingPlayer, int depth) {
     if (board.getGameState() == GameState::BlackWins) {
         return 10000000 + depth;
     } else if (board.getGameState() == GameState::WhiteWins) {
@@ -51,7 +52,7 @@ int minimax(const Board &board, const std::vector<Move> &moves, bool maximizingP
 
     int bestValue = maximizingPlayer? INT_MIN : INT_MAX;
 
-    for (const auto &move : moves) {
+    for (const auto &move : moves.moves) {
         Board boardCopy(board);
         if (maximizingPlayer) {
             boardCopy.performBlackMove(move);
@@ -70,17 +71,17 @@ int minimax(const Board &board, const std::vector<Move> &moves, bool maximizingP
 }
 
 int alphabeta(const Board &board, int depth, int alpha, int beta, bool maximizingPlayer) {
-    if (board.getGameState() == GameState::BlackWins) {
+    if (unlikely(board.getGameState() == GameState::BlackWins)) {
 #if STATS
         nodesEvaluated++;
 #endif
         return 10000000 + depth;
-    } else if (board.getGameState() == GameState::WhiteWins) {
+    } else if (unlikely(board.getGameState() == GameState::WhiteWins)) {
 #if STATS
         nodesEvaluated++;
 #endif
         return -10000000 - depth;
-    } else if (depth == 0 || std::chrono::system_clock::now() > stopTime) {
+    } else if (likely(depth == 0) || std::chrono::system_clock::now() > stopTime) {
 #if STATS
         nodesEvaluated++;
 #endif
@@ -91,10 +92,12 @@ int alphabeta(const Board &board, int depth, int alpha, int beta, bool maximizin
         int bestValue = INT_MIN;
         auto moves = board.getValidMoves(PieceRange::Black);
 #if STATS
-        branchNum += moves.size();
+        branchNum += moves.moves.size();
         branchDenom++;
 #endif
-        for (auto move : moves) {
+
+        std::swap(moves.moves[0], moves.moves[moves.carIdx]);
+        for (auto move : moves.moves) {
             Board boardCopy(board);
             boardCopy.performBlackMove(move);
             int nodeValue = alphabeta(boardCopy, depth - 1, alpha, beta, false);
@@ -107,10 +110,11 @@ int alphabeta(const Board &board, int depth, int alpha, int beta, bool maximizin
         int bestValue = INT_MAX;
         auto moves = board.getValidMoves(PieceRange::White);
 #if STATS
-        branchNum += moves.size();
+        branchNum += moves.moves.size();
         branchDenom++;
 #endif
-        for (auto move : moves) {
+        std::swap(moves.moves[0], moves.moves[moves.carIdx]);
+        for (auto move : moves.moves) {
             Board boardCopy(board);
             boardCopy.performWhiteMove(move);
             int nodeValue = alphabeta(boardCopy, depth - 1, alpha, beta, true);
@@ -122,7 +126,7 @@ int alphabeta(const Board &board, int depth, int alpha, int beta, bool maximizin
     }
 }
 
-Move getComputerMove(Board &board, std::vector<Move> &moves) {
+Move getComputerMove(Board &board, MoveList &moves) {
     Move bestMove{PieceType::EmptyPiece, 0, 0};
     int bestValue = INT_MIN;
 
@@ -138,7 +142,7 @@ Move getComputerMove(Board &board, std::vector<Move> &moves) {
     int depth = 1;
     while (stopTime > std::chrono::system_clock::now()) {
         cout << "Calculating at depth " << ++depth << '\r' << flush;
-        for (const auto &move : moves) {
+        for (const auto &move : moves.moves) {
             Board boardCopy(board);
             boardCopy.performBlackMove(move);
 #if AB_PRUNING
@@ -152,6 +156,8 @@ Move getComputerMove(Board &board, std::vector<Move> &moves) {
             }
         }
     }
+
+    cout << endl << endl;
 
 #if STATS
     auto endTime = std::chrono::steady_clock::now();

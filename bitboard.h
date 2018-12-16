@@ -25,6 +25,7 @@ u64 pieceLookupTable[64];
 u64 maskPieceLookupTable[64];
 u64 knightLookupTable[64];
 u64 rayLookupTable[8][64];
+u64 zobristTable[11][64];
 
 class BitBoard {
 public:
@@ -176,4 +177,19 @@ void initRayLookupTable() {
         }
         rayLookupTable[West][j] = attackRay & rightColMask;
     }
+}
+
+void initZobrist() {
+    for (int i = 0; i <= 10; i++) {
+        for (int j = 0; j < 64; j++) {
+            zobristTable[i][j] = (static_cast<u64>(rand()) << 32) | rand();
+        }
+    }
+}
+
+void initAll() {
+    initPieceLookupTable();
+    initKnightLookupTable();
+    initRayLookupTable();
+    initZobrist();
 }
